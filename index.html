@@ -1,0 +1,1025 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Welcome Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&family=Fredoka+One:wght@400&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/particles.js/2.0.0/particles.min.js"></script>
+</head>
+<body>
+    <!-- Background Elements -->
+    <div id="particles-js"></div>
+    <div class="gradient-overlay"></div>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Header with Status on Right -->
+        <header class="header">
+            <div class="header-content">
+                <div class="title-section">
+                    <h1 class="main-title">
+                        <span class="title-word">Welcome To Summer School</span>
+                    </h1>
+                    <div class="subtitle">Live Student Greetings</div>
+                </div>
+                
+                <div class="status-section">
+                    <div class="status-indicator" id="statusIndicator">
+                        <div class="pulse-dot"></div>
+                        <span class="status-text">Listening for students...</span>
+                    </div>
+                    <div class="student-count">
+                        <span class="count-number" id="studentCount">0</span>
+                        <span class="count-label">Active Students</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Greetings Container - Much Larger Area -->
+        <div class="greetings-container" id="greetingsContainer">
+            <!-- Dynamic greetings will be inserted here -->
+        </div>
+
+        <!-- Floating Elements -->
+        <div class="floating-elements">
+            <div class="float-circle float-1"></div>
+            <div class="float-circle float-2"></div>
+            <div class="float-circle float-3"></div>
+            <div class="float-triangle float-4"></div>
+            <div class="float-square float-5"></div>
+        </div>
+    </div>
+
+    <!-- Fireworks Canvas -->
+    <canvas id="fireworksCanvas"></canvas>
+
+    <script type="module">
+        // Firebase configuration (add your config here)
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { getFirestore, collection, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // Your Firebase config
+        const firebaseConfig = {
+  apiKey: "AIzaSyDG6AKodOCA7IKBrocfq_EI6Ty2Wv2GK8A",
+  authDomain: "smartattend-64275.firebaseapp.com",
+  projectId: "smartattend-64275",
+  storageBucket: "smartattend-64275.firebasestorage.app",
+  messagingSenderId: "296508475394",
+  appId: "1:296508475394:web:8268954eee39930ef43f1b",
+  measurementId: "G-KSRSRQ6PKE"
+};
+
+        console.log('🔥 Initializing Firebase...');
+
+        // Initialize Firebase
+        let app, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            console.log('✅ Firebase initialized successfully');
+        } catch (error) {
+            console.error('❌ Firebase initialization failed:', error);
+        }
+
+        // Global variables
+        let studentCount = 0;
+        let activeGreetings = new Map();
+        let fireworksCanvas, ctx;
+        let particles = [];
+        let fireworksActive = false;
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📄 DOM loaded, starting app...');
+            initializeFireworks();
+            initializeParticles();
+            setupFirestoreListener();
+            animateFloatingElements();
+        });
+
+        // Initialize fireworks canvas
+        function initializeFireworks() {
+            console.log('🎆 Initializing fireworks...');
+            fireworksCanvas = document.getElementById('fireworksCanvas');
+            if (!fireworksCanvas) {
+                console.error('❌ Fireworks canvas not found');
+                return;
+            }
+            
+            ctx = fireworksCanvas.getContext('2d');
+            
+            function resizeCanvas() {
+                fireworksCanvas.width = window.innerWidth;
+                fireworksCanvas.height = window.innerHeight;
+            }
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            animateFireworks();
+            console.log('✅ Fireworks initialized');
+        }
+
+        // Initialize particle background
+        function initializeParticles() {
+            console.log('✨ Initializing particles...');
+            if (typeof particlesJS === 'undefined') {
+                console.error('❌ Particles.js not loaded');
+                return;
+            }
+            
+            particlesJS('particles-js', {
+                particles: {
+                    number: { value: 50 },
+                    color: { value: ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7'] },
+                    shape: { type: 'circle' },
+                    opacity: { value: 0.1, random: true },
+                    size: { value: 3, random: true },
+                    line_linked: { enable: false },
+                    move: {
+                        enable: true,
+                        speed: 1,
+                        direction: 'none',
+                        random: true,
+                        straight: false,
+                        out_mode: 'out'
+                    }
+                },
+                interactivity: {
+                    detect_on: 'canvas',
+                    events: {
+                        onhover: { enable: true, mode: 'repulse' },
+                        onclick: { enable: true, mode: 'push' }
+                    }
+                }
+            });
+            console.log('✅ Particles initialized');
+        }
+
+        // Setup Firestore listener
+        function setupFirestoreListener() {
+            console.log('👂 Setting up Firestore listener...');
+            
+            if (!db) {
+                console.error('❌ Database not initialized');
+                return;
+            }
+
+            try {
+                const studentsRef = collection(db, 'Students');
+                console.log('📚 Students collection reference created');
+                
+                const unsubscribe = onSnapshot(studentsRef, 
+                    (snapshot) => {
+                        console.log('📸 Snapshot received!');
+                        console.log('📊 Snapshot size:', snapshot.size);
+                        
+                        snapshot.docChanges().forEach((change) => {
+                            console.log(`🔄 Document change detected: ${change.type}`);
+                            
+                            if (change.type === 'added') {
+                                const studentData = change.doc.data();
+                                console.log('➕ New student added:', studentData);
+                                
+                                if (studentData.name) {
+                                    console.log('👋 Handling new student:', studentData.name);
+                                    handleNewStudent(studentData.name, change.doc.id);
+                                }
+                            } else if (change.type === 'removed') {
+                                console.log('➖ Student removed:', change.doc.id);
+                                removeStudentGreeting(change.doc.id);
+                            }
+                        });
+                        
+                        updateStudentCount(snapshot.size);
+                        updateStatus(snapshot.size > 0);
+                    },
+                    (error) => {
+                        console.error('❌ Firestore listener error:', error);
+                        
+                        const statusText = document.querySelector('.status-text');
+                        if (statusText) {
+                            statusText.textContent = `Error: ${error.message}`;
+                            statusText.style.color = '#ff6b6b';
+                        }
+                    }
+                );
+                
+                console.log('✅ Firestore listener set up successfully');
+                window.firestoreUnsubscribe = unsubscribe;
+                
+            } catch (error) {
+                console.error('❌ Error setting up Firestore listener:', error);
+            }
+        }
+
+        // Handle new student detection
+        function handleNewStudent(name, docId) {
+            console.log(`🎉 New student detected: ${name} (${docId})`);
+            
+            if (activeGreetings.has(docId)) {
+                console.log('⚠️ Greeting already exists for this student');
+                return;
+            }
+
+            createGreeting(name, docId);
+            triggerFireworks();
+        }
+
+        // Create greeting element with random positioning
+        function createGreeting(name, docId) {
+            console.log(`💬 Creating greeting for: ${name}`);
+            
+            const greetingsContainer = document.getElementById('greetingsContainer');
+            if (!greetingsContainer) {
+                console.error('❌ Greetings container not found');
+                return;
+            }
+            
+            const greeting = document.createElement('div');
+            greeting.className = 'greeting-card';
+            greeting.id = `greeting-${docId}`;
+            
+            const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#fd79a8', '#fdcb6e'];
+            const randomColor = colors[Math.floor(Math.random() * colors.length)];
+            
+            greeting.innerHTML = `
+                <div class="greeting-content" style="--accent-color: ${randomColor}">
+                    <div class="greeting-icon">👋</div>
+                    <div class="greeting-text">Welcome</div>
+                    <div class="student-name">${name}</div>
+                    <div class="greeting-sparkles">✨</div>
+                </div>
+            `;
+
+            // Get random position with collision detection
+            const position = getRandomPosition(greetingsContainer);
+            
+            greeting.style.left = `${position.x}px`;
+            greeting.style.top = `${position.y}px`;
+
+            greetingsContainer.appendChild(greeting);
+            activeGreetings.set(docId, { element: greeting, position: position });
+            
+            console.log(`✅ Greeting created and positioned at (${position.x}, ${position.y})`);
+
+            // Animate entrance with GSAP if available
+            if (typeof gsap !== 'undefined') {
+                gsap.fromTo(greeting, 
+                    { scale: 0, rotation: -180, opacity: 0 }, 
+                    { scale: 1, rotation: 0, opacity: 1, duration: 0.8, ease: "back.out(1.7)" }
+                );
+            }
+
+            // Create focused fireworks around the greeting
+            createFocusedFireworks(position.x + 140, position.y + 50);
+
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                if (activeGreetings.has(docId)) {
+                    console.log(`⏰ Auto-removing greeting for: ${name}`);
+                    removeGreetingAnimation(greeting, docId);
+                }
+            }, 10000);
+        }
+
+        // Get random position with collision detection
+        function getRandomPosition(container) {
+            const containerRect = container.getBoundingClientRect();
+            const cardWidth = 280;
+            const cardHeight = 100;
+            const padding = 20;
+            
+            let attempts = 0;
+            let position;
+            
+            do {
+                position = {
+                    x: Math.random() * (containerRect.width - cardWidth - padding * 2) + padding,
+                    y: Math.random() * (containerRect.height - cardHeight - padding * 2) + padding
+                };
+                attempts++;
+            } while (attempts < 20 && hasCollision(position, cardWidth, cardHeight));
+            
+            return position;
+        }
+
+        // Check for collision with existing greetings
+        function hasCollision(newPos, width, height) {
+            const buffer = 20; // Minimum distance between cards
+            
+            for (let [docId, greetingData] of activeGreetings) {
+                const existingPos = greetingData.position;
+                
+                if (newPos.x < existingPos.x + width + buffer &&
+                    newPos.x + width + buffer > existingPos.x &&
+                    newPos.y < existingPos.y + height + buffer &&
+                    newPos.y + height + buffer > existingPos.y) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Create focused fireworks around a specific position
+        function createFocusedFireworks(centerX, centerY) {
+            fireworksActive = true;
+            
+            for (let burst = 0; burst < 8; burst++) {
+                setTimeout(() => {
+                    const offsetX = (Math.random() - 0.5) * 300;
+                    const offsetY = (Math.random() - 0.5) * 200;
+                    const x = Math.max(50, Math.min(fireworksCanvas.width - 50, centerX + offsetX));
+                    const y = Math.max(50, Math.min(fireworksCanvas.height - 50, centerY + offsetY));
+                    
+                    createSingleFirework(x, y);
+                }, burst * 100);
+            }
+            
+            setTimeout(() => {
+                fireworksActive = false;
+            }, 1500);
+        }
+
+        // Remove student greeting
+        function removeStudentGreeting(docId) {
+            console.log(`🗑️ Removing greeting for document: ${docId}`);
+            if (activeGreetings.has(docId)) {
+                const greetingData = activeGreetings.get(docId);
+                removeGreetingAnimation(greetingData.element, docId);
+            }
+        }
+
+        // Animate greeting removal
+        function removeGreetingAnimation(greeting, docId) {
+            if (typeof gsap !== 'undefined') {
+                gsap.to(greeting, {
+                    scale: 0,
+                    opacity: 0,
+                    y: -50,
+                    duration: 0.5,
+                    ease: "power2.in",
+                    onComplete: () => {
+                        greeting.remove();
+                        activeGreetings.delete(docId);
+                        console.log(`✅ Greeting removed for: ${docId}`);
+                    }
+                });
+            } else {
+                greeting.remove();
+                activeGreetings.delete(docId);
+            }
+        }
+
+        // Update student count
+        function updateStudentCount(count) {
+            console.log(`📊 Updating student count to: ${count}`);
+            studentCount = count;
+            const countElement = document.getElementById('studentCount');
+            
+            if (countElement) {
+                if (typeof gsap !== 'undefined') {
+                    gsap.to(countElement, {
+                        innerHTML: count,
+                        duration: 0.5,
+                        ease: "power2.out",
+                        onUpdate: function() {
+                            countElement.innerHTML = Math.round(countElement.innerHTML);
+                        }
+                    });
+                } else {
+                    countElement.textContent = count;
+                }
+            }
+        }
+
+        // Update status indicator
+        function updateStatus(hasStudents) {
+            console.log(`🚥 Updating status - has students: ${hasStudents}`);
+            const statusIndicator = document.getElementById('statusIndicator');
+            const statusText = statusIndicator?.querySelector('.status-text');
+            
+            if (statusIndicator && statusText) {
+                if (hasStudents) {
+                    statusIndicator.classList.add('active');
+                    statusText.textContent = 'Students detected!';
+                    statusText.style.color = '';
+                } else {
+                    statusIndicator.classList.remove('active');
+                    statusText.textContent = 'Listening for students...';
+                    statusText.style.color = '';
+                }
+            }
+        }
+
+        // Trigger fireworks
+        function triggerFireworks() {
+            console.log('🎆 Triggering fireworks!');
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    createFirework();
+                }, i * 200);
+            }
+        }
+
+        // Create single firework
+        function createFirework() {
+            if (!ctx) return;
+            
+            const x = Math.random() * fireworksCanvas.width;
+            const y = Math.random() * (fireworksCanvas.height * 0.6) + fireworksCanvas.height * 0.2;
+            const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#fd79a8', '#fdcb6e'];
+            
+            for (let i = 0; i < 30; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    life: 1,
+                    decay: 0.02,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    size: Math.random() * 3 + 1
+                });
+            }
+        }
+
+        // Create single firework at specific position
+        function createSingleFirework(x, y) {
+            if (!ctx) return;
+            
+            const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ffeaa7', '#fd79a8', '#fdcb6e'];
+            
+            for (let i = 0; i < 30; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    life: 1,
+                    decay: 0.02,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    size: Math.random() * 3 + 1
+                });
+            }
+        }
+
+        // Animate fireworks
+        function animateFireworks() {
+            if (!ctx) return;
+            
+            ctx.clearRect(0, 0, fireworksCanvas.width, fireworksCanvas.height);
+            
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.1;
+                p.life -= p.decay;
+                
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+                
+                ctx.globalAlpha = p.life;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.globalAlpha = 1;
+            requestAnimationFrame(animateFireworks);
+        }
+
+        // Animate floating elements
+        function animateFloatingElements() {
+            if (typeof gsap === 'undefined') {
+                console.warn('⚠️ GSAP not loaded, skipping floating animations');
+                return;
+            }
+            
+            gsap.to('.float-1', { y: -20, duration: 2, repeat: -1, yoyo: true, ease: "power2.inOut" });
+            gsap.to('.float-2', { y: -30, duration: 2.5, repeat: -1, yoyo: true, ease: "power2.inOut", delay: 0.3 });
+            gsap.to('.float-3', { y: -15, duration: 1.8, repeat: -1, yoyo: true, ease: "power2.inOut", delay: 0.6 });
+            gsap.to('.float-4', { rotation: 360, duration: 8, repeat: -1, ease: "none" });
+            gsap.to('.float-5', { rotation: -360, duration: 10, repeat: -1, ease: "none" });
+        }
+
+        // Manual test function
+        window.testFirestore = function() {
+            console.log('🧪 Running manual Firestore test...');
+            
+            if (!db) {
+                console.error('❌ Database not available for testing');
+                return;
+            }
+            
+            handleNewStudent('Test Student', 'test-doc-id');
+        };
+
+        // Cleanup function
+        window.addEventListener('beforeunload', () => {
+            if (window.firestoreUnsubscribe) {
+                window.firestoreUnsubscribe();
+                console.log('🧹 Firestore listener cleaned up');
+            }
+        });
+
+        console.log('📜 Script loaded successfully');
+        console.log('💡 Run testFirestore() in console to test manually');
+    </script>
+
+    <style>
+        /* Updated CSS for new layout */
+        
+        /* Reset and Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            overflow: hidden;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 75%, #4facfe 100%);
+            background-size: 400% 400%;
+            animation: gradientShift 15s ease infinite;
+            height: 100vh;
+            position: relative;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* Particle.js Container */
+        #particles-js {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Gradient Overlay */
+        .gradient-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 80%, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        /* Main Container */
+        .container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            z-index: 10;
+            padding: 20px;
+        }
+
+        /* Header Styles - New Layout */
+        .header {
+            margin-bottom: 20px;
+            z-index: 15;
+            position: relative;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+
+        .title-section {
+            flex: 1;
+        }
+
+        .status-section {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-shrink: 0;
+        }
+
+        .main-title {
+            font-family: 'Fredoka One', cursive;
+            font-size: clamp(2rem, 6vw, 4rem);
+            color: #ffffff;
+            text-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+
+        .title-word {
+            display: inline-block;
+            animation: titleFloat 3s ease-in-out infinite;
+        }
+
+        @keyframes titleFloat {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .subtitle {
+            font-size: clamp(0.9rem, 2.5vw, 1.2rem);
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 300;
+            letter-spacing: 1px;
+            text-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Status Indicator - Compact for Right Side */
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 25px;
+            padding: 10px 15px;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+
+        .status-indicator.active {
+            background: rgba(76, 175, 80, 0.2);
+            border-color: rgba(76, 175, 80, 0.4);
+            box-shadow: 0 8px 32px rgba(76, 175, 80, 0.3);
+        }
+
+        .pulse-dot {
+            width: 10px;
+            height: 10px;
+            background: #ff6b6b;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            flex-shrink: 0;
+        }
+
+        .status-indicator.active .pulse-dot {
+            background: #4CAF50;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .status-text {
+            color: rgba(255, 255, 255, 0.9);
+            font-weight: 500;
+            font-size: 0.85rem;
+        }
+
+        .student-count {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 12px 18px;
+            min-width: 80px;
+        }
+
+        .count-number {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #ffffff;
+            text-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            line-height: 1;
+        }
+
+        .count-label {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.8);
+            font-weight: 400;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 2px;
+        }
+
+        /* Greetings Container - Much Larger */
+        .greetings-container {
+            position: relative;
+            width: 100%;
+            height: calc(100vh - 150px);
+            z-index: 12;
+            overflow: hidden;
+        }
+
+        /* Greeting Cards */
+        .greeting-card {
+            position: absolute;
+            z-index: 20;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .greeting-card:hover {
+            transform: scale(1.05) !important;
+        }
+
+        .greeting-content {
+            background: none;
+            backdrop-filter: none;
+            border: none;
+            border-radius: 0;
+            padding: 15px 20px;
+            text-align: center;
+            box-shadow: none;
+            position: relative;
+            overflow: visible;
+            width: 280px;
+            height: 100px;
+            animation: none;
+            transform-style: preserve-3d;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .greeting-content::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, var(--accent-color), transparent, var(--accent-color));
+            border-radius: 25px;
+            z-index: -1;
+            animation: borderRotate 3s linear infinite;
+        }
+
+        @keyframes borderRotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .greeting-icon {
+            font-size: 2rem;
+            margin-bottom: 5px;
+            animation: wave 2s ease-in-out infinite;
+        }
+
+        @keyframes wave {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(20deg); }
+            75% { transform: rotate(-20deg); }
+        }
+
+        .greeting-text {
+            font-family: 'Fredoka One', cursive;
+            font-size: 0.9rem;
+            font-weight: 400;
+            color: #ffffff;
+            text-shadow: 
+                0 2px 4px rgba(0, 0, 0, 0.8),
+                0 4px 8px rgba(0, 0, 0, 0.6),
+                0 0 20px rgba(255, 255, 255, 0.3);
+            margin-bottom: 2px;
+            line-height: 1.2;
+        }
+
+        .student-name {
+            display: block;
+            color: #ffffff;
+            font-family: 'Fredoka One', cursive;
+            font-weight: 400;
+            font-size: 2rem;
+            text-shadow: 
+                0 4px 8px rgba(0, 0, 0, 0.8),
+                0 6px 12px rgba(0, 0, 0, 0.6),
+                0 0 30px rgba(255, 255, 255, 0.4),
+                0 0 40px var(--accent-color);
+            margin: 2px 0;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            animation: nameGlow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes nameGlow {
+            0% { 
+                text-shadow: 
+                    0 4px 8px rgba(0, 0, 0, 0.8),
+                    0 6px 12px rgba(0, 0, 0, 0.6),
+                    0 0 30px rgba(255, 255, 255, 0.4),
+                    0 0 40px var(--accent-color);
+                transform: scale(1);
+            }
+            100% { 
+                text-shadow: 
+                    0 4px 8px rgba(0, 0, 0, 0.8),
+                    0 6px 12px rgba(0, 0, 0, 0.6),
+                    0 0 40px rgba(255, 255, 255, 0.6),
+                    0 0 60px var(--accent-color),
+                    0 0 80px var(--accent-color);
+                transform: scale(1.05);
+            }
+        }
+
+        .greeting-sparkles {
+            font-size: 1rem;
+            animation: sparkle 1.5s ease-in-out infinite;
+        }
+
+        @keyframes sparkle {
+            0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.8; }
+            50% { transform: scale(1.2) rotate(180deg); opacity: 1; }
+        }
+
+        /* Floating Elements */
+        .floating-elements {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .float-circle,
+        .float-triangle,
+        .float-square {
+            position: absolute;
+            opacity: 0.1;
+        }
+
+        .float-circle {
+            border-radius: 50%;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+        }
+
+        .float-1 {
+            width: 80px;
+            height: 80px;
+            top: 20%;
+            left: 10%;
+        }
+
+        .float-2 {
+            width: 120px;
+            height: 120px;
+            top: 60%;
+            right: 15%;
+            background: linear-gradient(45deg, #45b7d1, #96ceb4);
+        }
+
+        .float-3 {
+            width: 60px;
+            height: 60px;
+            bottom: 30%;
+            left: 20%;
+            background: linear-gradient(45deg, #ffeaa7, #fd79a8);
+        }
+
+        .float-triangle {
+            width: 0;
+            height: 0;
+            border-left: 40px solid transparent;
+            border-right: 40px solid transparent;
+            border-bottom: 70px solid rgba(255, 107, 107, 0.1);
+            top: 40%;
+            right: 25%;
+        }
+
+        .float-square {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(45deg, rgba(78, 205, 196, 0.1), rgba(69, 183, 209, 0.1));
+            top: 70%;
+            right: 40%;
+            border-radius: 10px;
+        }
+
+        /* Fireworks Canvas */
+        #fireworksCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 8;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .header-content {
+                flex-direction: column;
+                gap: 15px;
+                align-items: center;
+            }
+            
+            .status-section {
+                gap: 15px;
+            }
+            
+            .greeting-content {
+                width: 250px;
+                padding: 12px 18px;
+            }
+            
+            .greeting-text {
+                font-size: 0.8rem;
+            }
+            
+            .student-name {
+                font-size: 1.8rem;
+            }
+            
+            .main-title {
+                margin-bottom: 10px;
+                text-align: center;
+            }
+            
+            .greetings-container {
+                height: calc(100vh - 200px);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .greeting-content {
+                width: 220px;
+                padding: 10px 15px;
+            }
+            
+            .greeting-text {
+                font-size: 0.75rem;
+            }
+            
+            .greeting-icon {
+                font-size: 1.8rem;
+            }
+            
+            .student-name {
+                font-size: 1.5rem;
+            }
+            
+            .count-number {
+                font-size: 1.5rem;
+            }
+            
+            .status-indicator {
+                padding: 8px 12px;
+            }
+            
+            .student-count {
+                padding: 10px 15px;
+                min-width: 70px;
+            }
+            
+            .status-text {
+                font-size: 0.75rem;
+            }
+        }
+
+        /* Accessibility */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        /* High contrast mode */
+        @media (prefers-contrast: high) {
+            .greeting-content {
+                border-width: 3px;
+                background: rgba(0, 0, 0, 0.8);
+            }
+            
+            .status-indicator,
+            .student-count {
+                background: rgba(0, 0, 0, 0.8);
+                border-width: 2px;
+            }
+        }
+    </style>
+</body>
+</html>
